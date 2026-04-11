@@ -26,7 +26,7 @@ export default function Footer() {
               Progyantra
             </p>
             <p className="mt-2 max-w-md text-sm leading-7 text-white/70">
-              Antigravity learning interface for roadmaps, testing, and competitive
+               Learning interface for roadmaps, testing, and competitive
               progress.
             </p>
           </div>

@@ -35,7 +35,7 @@ export default function UiLabPage() {
             Interface Testing Ground
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-8 text-white/68">
-            Dedicated page for testing the new antigravity components and transitions
+            Dedicated page for testing the new  components and transitions
             before backend integration.
           </p>
         </motion.section>
