@@ -155,7 +155,7 @@ export default function OnboardingPage() {
 
     const timeout = setTimeout(() => {
       const skillSlug = selectedSkill.toLowerCase().replace(/\s+/g, "-");
-      router.push(`/roadmap?skill=${skillSlug}`);
+      router.push(`/roadmap/overview?skill=${skillSlug}`);
     }, 600);
 
     return () => clearTimeout(timeout);

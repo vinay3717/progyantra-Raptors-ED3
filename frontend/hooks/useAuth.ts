@@ -80,7 +80,14 @@ export function useAuth() {
       };
 
       persistAuth(data.token, nextUser);
-      router.push(nextUser.onboarding_complete ? "/roadmap" : "/onboarding");
+      if (nextUser.onboarding_complete) {
+        const skillQuery = nextUser.selected_skill
+          ? `?skill=${encodeURIComponent(nextUser.selected_skill)}`
+          : "";
+        router.push(`/roadmap/overview${skillQuery}`);
+      } else {
+        router.push("/onboarding");
+      }
     } catch {
       const fallbackToken = "mock.jwt.token";
       const nextUser: AuthUser = {
