@@ -1,80 +1,113 @@
 import json
 
-from roadmap.models import Roadmap, Unit, SubPoint
+from roadmap.models import Roadmap, SubPoint, Unit
 
 
-def seed_sample_data(db):
-    if db.query(Roadmap).first():
+def seed_sample_data(db) -> None:
+    existing = db.query(Roadmap).filter(Roadmap.skill_name == "web-development").first()
+    if existing:
         return
 
     roadmap = Roadmap(
-        skill_name="python",
-        overview_text="Build a strong Python foundation from syntax to real-world applications.",
-        career_impact="Python is widely used in backend development, data engineering, automation, and AI workflows.",
+        skill_name="web-development",
+        overview_text="Web development is the process of building modern, accessible, and scalable web applications.",
+        career_impact="Strong web development skills unlock roles across startups, product teams, and enterprise engineering.",
         syllabus_summary=json.dumps(
             [
-                "Syntax and core data types",
-                "Functions, modules, and packages",
-                "Object-oriented programming",
-                "File handling and error management",
-                "APIs, SQL, and automation basics",
+                "HTML foundations",
+                "CSS systems and responsive layouts",
+                "JavaScript core",
+                "React fundamentals",
+                "Backend and API integration",
+            ]
+        ),
+        program_outcomes=json.dumps(
+            [
+                "Build responsive frontend applications",
+                "Integrate real APIs with secure auth",
+                "Ship project-ready web portfolios",
+                "Prepare for technical interviews",
             ]
         ),
         difficulty_band="beginner",
         total_score=100,
     )
 
-    unit1 = Unit(title="Python Fundamentals", order_index=1, unit_score=30, is_locked=False)
+    unit1 = Unit(title="HTML Fundamentals", order_index=1, unit_score=30, is_locked=False)
     unit1.subpoints = [
         SubPoint(
-            title="Variables, types, and operators",
+            title="Semantic HTML and structure",
             order_index=1,
-            practice_url="https://www.hackerrank.com/domains/python",
-            learning_resource_url="https://docs.python.org/3/tutorial/",
+            practice_url="https://developer.mozilla.org/en-US/docs/Web/HTML",
+            learning_resource_url="https://www.freecodecamp.org/news/semantic-html5-elements/",
             assessment_type="quiz",
+            points_value=10,
         ),
         SubPoint(
-            title="Control flow and loops",
+            title="Forms and validations",
             order_index=2,
-            practice_url="https://www.codewars.com/kata/search/python",
-            learning_resource_url="https://docs.python.org/3/tutorial/controlflow.html",
-            assessment_type="quiz",
+            practice_url="https://www.frontendmentor.io/",
+            learning_resource_url="https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms",
+            assessment_type="task",
+            points_value=10,
+        ),
+        SubPoint(
+            title="Mini portfolio section",
+            order_index=3,
+            practice_url="https://www.frontendmentor.io/challenges",
+            learning_resource_url="https://developer.mozilla.org/en-US/docs/Learn/HTML",
+            assessment_type="project",
+            points_value=10,
         ),
     ]
 
-    unit2 = Unit(title="Python in Practice", order_index=2, unit_score=40, is_locked=False)
+    unit2 = Unit(title="CSS Architecture", order_index=2, unit_score=35, is_locked=True)
     unit2.subpoints = [
         SubPoint(
-            title="Functions and modules",
+            title="Cascade and specificity",
             order_index=1,
-            practice_url="https://realpython.com/python-modules-packages/",
-            learning_resource_url="https://docs.python.org/3/tutorial/modules.html",
-            assessment_type="coding",
+            practice_url="https://specificity.keegan.st/",
+            learning_resource_url="https://developer.mozilla.org/en-US/docs/Learn/CSS/Building_blocks/Cascade_and_inheritance",
+            assessment_type="quiz",
+            points_value=10,
         ),
         SubPoint(
-            title="Working with files and errors",
+            title="Flexbox and Grid layouts",
             order_index=2,
-            practice_url="https://www.geeksforgeeks.org/file-handling-python/",
-            learning_resource_url="https://docs.python.org/3/tutorial/inputoutput.html",
-            assessment_type="coding",
+            practice_url="https://cssgridgarden.com/",
+            learning_resource_url="https://developer.mozilla.org/en-US/docs/Learn/CSS/CSS_layout",
+            assessment_type="task",
+            points_value=10,
+        ),
+        SubPoint(
+            title="Responsive landing page",
+            order_index=3,
+            practice_url="https://www.frontendmentor.io/challenges",
+            learning_resource_url="https://web.dev/learn/design",
+            assessment_type="project",
+            points_value=15,
         ),
     ]
 
-    unit3 = Unit(title="Backend Readiness", order_index=3, unit_score=30, is_locked=False)
+    unit3 = Unit(title="JavaScript Essentials", order_index=3, unit_score=35, is_locked=True)
     unit3.subpoints = [
         SubPoint(
-            title="HTTP APIs with FastAPI",
+            title="Variables, arrays, and objects",
             order_index=1,
-            practice_url="https://fastapi.tiangolo.com/tutorial/",
-            learning_resource_url="https://fastapi.tiangolo.com/",
-            assessment_type="project",
+            assessment_type="quiz",
+            points_value=10,
         ),
         SubPoint(
-            title="SQLAlchemy and SQLite",
+            title="Async operations and API calls",
             order_index=2,
-            practice_url="https://docs.sqlalchemy.org/",
-            learning_resource_url="https://docs.sqlalchemy.org/en/20/orm/quickstart.html",
+            assessment_type="task",
+            points_value=10,
+        ),
+        SubPoint(
+            title="Task manager project",
+            order_index=3,
             assessment_type="project",
+            points_value=15,
         ),
     ]
 

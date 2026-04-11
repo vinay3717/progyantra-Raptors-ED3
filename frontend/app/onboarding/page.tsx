@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useTimer } from "react-timer-hook";
 import Navbar from "@/components/Navbar";
+import api from "@/lib/api";
 import type { DifficultyBand } from "@/types/roadmap";
 
 type QuizQuestion = {
@@ -134,6 +135,8 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (step !== 4 || loadingProgress < 100 || !assignedLevel) return;
 
+    const skillSlug = selectedSkill.toLowerCase().replace(/\s+/g, "-");
+
     const rawUser = localStorage.getItem("auth_user");
     if (rawUser) {
       try {
@@ -143,7 +146,7 @@ export default function OnboardingPage() {
           level?: DifficultyBand;
           onboarding_complete?: boolean;
         };
-        parsed.selected_skill = selectedSkill.toLowerCase().replace(/\s+/g, "-");
+        parsed.selected_skill = skillSlug;
         parsed.test_score = score ?? 0;
         parsed.level = assignedLevel;
         parsed.onboarding_complete = true;
@@ -153,9 +156,28 @@ export default function OnboardingPage() {
       }
     }
 
+    const syncAndRoute = async () => {
+      try {
+        const { data } = await api.patch("/api/auth/onboarding", {
+          selected_skill: skillSlug,
+          test_score: score ?? 0,
+          level: assignedLevel,
+          onboarding_complete: true,
+        });
+
+        const nextToken = (data as { token?: string }).token;
+        if (nextToken) {
+          localStorage.setItem("token", nextToken);
+        }
+      } catch {
+        // Keep local state if backend sync is not available.
+      } finally {
+        router.push(`/roadmap?skill=${skillSlug}`);
+      }
+    };
+
     const timeout = setTimeout(() => {
-      const skillSlug = selectedSkill.toLowerCase().replace(/\s+/g, "-");
-      router.push(`/roadmap?skill=${skillSlug}`);
+      void syncAndRoute();
     }, 600);
 
     return () => clearTimeout(timeout);

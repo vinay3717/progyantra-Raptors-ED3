@@ -29,8 +29,8 @@ def next_question(request: QuestionRequest) -> NextQuestionResponse:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "LLM is not configured. Set LLM_API_URL, LLM_API_KEY, and "
-                "LLM_MODEL or use /personality-test/prompt."
+                "LLM is not configured. Set GEMINI_API_KEY (preferred), or "
+                "LLM_API_URL, LLM_API_KEY, and LLM_MODEL."
             ),
         )
 

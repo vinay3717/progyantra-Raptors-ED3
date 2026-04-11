@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import api from "@/lib/api";
 import type { AuthPayload, AuthResponse, AuthUser } from "@/types/user";
 
@@ -21,7 +22,9 @@ function decodeJwtPayload(token: string): AuthPayload | null {
   try {
     const [, payload] = token.split(".");
     if (!payload) return null;
-    const decoded = JSON.parse(atob(payload));
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const decoded = JSON.parse(atob(padded));
     return decoded as AuthPayload;
   } catch {
     return null;
@@ -57,6 +60,18 @@ export function useAuth() {
     setUser(fallbackUser);
   };
 
+  const parseApiError = (unknownError: unknown, fallback: string) => {
+    if (axios.isAxiosError(unknownError)) {
+      const apiMessage =
+        (unknownError.response?.data as { detail?: string; message?: string } | undefined)
+          ?.detail ??
+        (unknownError.response?.data as { detail?: string; message?: string } | undefined)
+          ?.message;
+      return apiMessage ?? fallback;
+    }
+    return fallback;
+  };
+
   const login = async (payload: Credentials) => {
     setLoading(true);
     setError(null);
@@ -81,22 +96,8 @@ export function useAuth() {
 
       persistAuth(data.token, nextUser);
       router.push(nextUser.onboarding_complete ? "/roadmap" : "/onboarding");
-    } catch {
-      const fallbackToken = "mock.jwt.token";
-      const nextUser: AuthUser = {
-        id: crypto.randomUUID(),
-        name: payload.email.split("@")[0] ?? "Learner",
-        email: payload.email,
-        selected_skill: null,
-        test_score: null,
-        level: null,
-        onboarding_complete: false,
-        total_points: 0,
-        streak_days: 0,
-      };
-
-      persistAuth(fallbackToken, nextUser);
-      router.push("/onboarding");
+    } catch (unknownError) {
+      setError(parseApiError(unknownError, "Unable to login. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -123,21 +124,8 @@ export function useAuth() {
 
       persistAuth(data.token, nextUser);
       router.push("/onboarding");
-    } catch {
-      const fallbackToken = "mock.jwt.token";
-      const nextUser: AuthUser = {
-        id: crypto.randomUUID(),
-        name: payload.name,
-        email: payload.email,
-        selected_skill: null,
-        test_score: null,
-        level: null,
-        onboarding_complete: false,
-        total_points: 0,
-        streak_days: 0,
-      };
-      persistAuth(fallbackToken, nextUser);
-      router.push("/onboarding");
+    } catch (unknownError) {
+      setError(parseApiError(unknownError, "Unable to signup. Please try again."));
     } finally {
       setLoading(false);
     }

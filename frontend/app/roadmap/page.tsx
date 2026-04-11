@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
@@ -13,7 +13,7 @@ import Overview from "@/app/roadmap/components/Overview";
 import GraphView from "@/app/roadmap/components/GraphView";
 import RoadmapAccordion from "@/app/roadmap/components/RoadmapAccordion";
 
-export default function RoadmapPage() {
+function RoadmapContent() {
   const searchParams = useSearchParams();
   const skill = searchParams.get("skill") ?? "web-development";
   const [badge, setBadge] = useState<string | null>(null);
@@ -114,5 +114,29 @@ export default function RoadmapPage() {
       />
       <BadgePopup badge={badge} />
     </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="min-h-screen bg-black px-5 pt-6 sm:px-8">
+      <Navbar />
+      <main className="mx-auto mt-8 w-full max-w-6xl space-y-4">
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <div
+            key={idx}
+            className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/5"
+          />
+        ))}
+      </main>
+    </div>
+  );
+}
+
+export default function RoadmapPage() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <RoadmapContent />
+    </Suspense>
   );
 }

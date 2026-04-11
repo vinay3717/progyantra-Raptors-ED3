@@ -4,6 +4,8 @@ from typing import Any, List, Tuple
 
 import httpx
 
+from core.gemini import generate_content
+
 from .prompt import DEFAULT_USER_MESSAGE, build_system_prompt
 from .schemas import PreviousAnswer, PromptMessage
 
@@ -27,6 +29,19 @@ def build_messages(
 
 
 def call_llm(messages: List[PromptMessage]) -> Tuple[dict[str, Any], str]:
+    combined_prompt = "\n\n".join(
+        [f"{message.role.upper()}:\n{message.content}" for message in messages]
+    )
+
+    # Preferred path: Gemini.
+    try:
+        raw, text = generate_content(combined_prompt, temperature=LLM_TEMPERATURE)
+        if text:
+            return raw, text
+    except ValueError:
+        # Gemini not configured; try generic LLM fallback below.
+        pass
+
     if not LLM_API_URL or not LLM_API_KEY or not LLM_MODEL:
         raise ValueError("LLM is not configured")
 
