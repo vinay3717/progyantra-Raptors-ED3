@@ -239,6 +239,37 @@ export function useRoadmap(skill: string) {
   const fetchRoadmap = useCallback(async () => {
     setLoading(true);
     setError(null);
+
+    if (typeof window !== "undefined") {
+      const overrideRaw = window.localStorage.getItem(`ai_roadmap:${skill}`);
+      if (overrideRaw) {
+        try {
+          const parsed = JSON.parse(overrideRaw) as RoadmapData;
+          setRoadmap(parsed);
+          setError("Using AI-generated roadmap (local override).");
+          setLoading(false);
+          return;
+        } catch {
+          window.localStorage.removeItem(`ai_roadmap:${skill}`);
+        }
+      }
+
+      const lastRaw = window.localStorage.getItem("ai_roadmap:last");
+      if (lastRaw) {
+        try {
+          const parsed = JSON.parse(lastRaw) as { skill?: string; roadmap?: RoadmapData };
+          if (parsed.roadmap && parsed.skill === skill) {
+            setRoadmap(parsed.roadmap);
+            setError("Using latest AI-generated roadmap (local override).");
+            setLoading(false);
+            return;
+          }
+        } catch {
+          window.localStorage.removeItem("ai_roadmap:last");
+        }
+      }
+    }
+
     try {
       const { data } = await api.get<RoadmapData>(`/api/roadmap/${skill}`);
       setRoadmap(data);

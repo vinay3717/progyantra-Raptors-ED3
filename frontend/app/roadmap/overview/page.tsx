@@ -50,7 +50,7 @@ export default function RoadmapOverviewPage() {
       </header>
 
       <div className="relative space-y-7 pl-10 before:absolute before:top-3 before:bottom-3 before:left-4 before:w-px before:bg-white/15">
-        {roadmap.units.map((unit, index) => {
+          {roadmap.units.map((unit, index) => {
           const milestone = timeline.find((item) => item.unitId === unit.id);
           const completion = milestone ? Math.round(milestone.completion * 100) : 0;
           const isActive = activeUnitId === unit.id;
@@ -88,7 +88,7 @@ export default function RoadmapOverviewPage() {
                   </span>
                   <div>
                     <p className="text-xs tracking-[0.16em] text-white/55 uppercase">
-                      {milestone?.dateLabel ?? `Week ${index + 1}`}
+                      {milestone ? `${milestone.startLabel} → due ${milestone.dueLabel}` : `Week ${index + 1}`}
                     </p>
                     <h3 className="mt-1 font-display text-2xl tracking-tight text-white">
                       {unit.title}

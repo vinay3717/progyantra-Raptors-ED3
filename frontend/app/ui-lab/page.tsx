@@ -63,6 +63,12 @@ export default function UiLabPage() {
             <p className="text-xs tracking-[0.16em] text-white/55 uppercase">Quick Route Testing</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
+                href="/ai"
+                className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/85 transition hover:border-white/40"
+              >
+                Open AI Hub
+              </Link>
+              <Link
                 href="/roadmap/overview"
                 className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/85 transition hover:border-white/40"
               >

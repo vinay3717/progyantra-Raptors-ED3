@@ -6,14 +6,18 @@ import {
   useMotionValue,
   useMotionValueEvent,
 } from "framer-motion";
-import { CheckCircle2, LockKeyhole, MoveRight, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, LockKeyhole, MoveRight, Sparkles } from "lucide-react";
+import dayjs from "dayjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GraphNodeStatus } from "@/types/roadmap";
 
 type TimelineMilestone = {
   unitId: string;
   title: string;
-  dateLabel: string;
+  startISO: string;
+  dueISO: string;
+  startLabel: string;
+  dueLabel: string;
   completion: number;
   status: GraphNodeStatus;
   note: string;
@@ -77,8 +81,19 @@ export default function WavyRoadmapGraph({
   onActiveChange,
   onCompleteTask,
 }: WavyRoadmapGraphProps) {
-  const width = Math.max(940, timeline.length * 220);
-  const height = 380;
+  const width = Math.max(1100, timeline.length * 250);
+  const height = 440;
+  const windowWidth = 1100;
+  const windowHeight = height;
+
+  const activeIndex = useMemo(() => {
+    if (!activeUnitId) return 0;
+    const idx = timeline.findIndex((item) => item.unitId === activeUnitId);
+    return idx >= 0 ? idx : 0;
+  }, [activeUnitId, timeline]);
+
+  const [noteMode, setNoteMode] = useState<"near" | "all">("near");
+  const [noteFilter, setNoteFilter] = useState<"all" | "done" | "upcoming">("all");
 
   const points = useMemo(() => {
     const step = (width - 160) / Math.max(timeline.length - 1, 1);
@@ -130,10 +145,33 @@ export default function WavyRoadmapGraph({
     setOrbPosition({ x: point.x, y: point.y });
   });
 
+  const viewBoxX = useMemo(() => {
+    const activeX = points[activeIndex]?.x ?? 0;
+    const desired = activeX - windowWidth / 2;
+    return Math.max(0, Math.min(desired, Math.max(0, width - windowWidth)));
+  }, [activeIndex, points, width]);
+
+  const viewBox = `${viewBoxX} 0 ${Math.min(windowWidth, width)} ${windowHeight}`;
+
+  const visibleNotes = useMemo(() => {
+    const base =
+      noteMode === "all"
+        ? timeline
+        : timeline.slice(Math.max(0, activeIndex - 2), Math.min(timeline.length, activeIndex + 5));
+
+    if (noteFilter === "done") {
+      return base.filter((item) => item.status === "completed");
+    }
+    if (noteFilter === "upcoming") {
+      return base.filter((item) => item.status !== "completed");
+    }
+    return base;
+  }, [activeIndex, noteFilter, noteMode, timeline]);
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.45fr_0.55fr]">
       <section
-        className={`rounded-[2rem] border p-5 backdrop-blur-2xl sm:p-7 ${
+        className={`relative rounded-[2rem] border p-5 backdrop-blur-2xl sm:p-7 ${
           rerouteMode
             ? "border-orange-300/35 bg-orange-500/[0.04]"
             : "border-white/15 bg-black/40"
@@ -145,6 +183,11 @@ export default function WavyRoadmapGraph({
             <h2 className="mt-2 font-display text-3xl tracking-tight text-white sm:text-4xl">
               Antigravity Progress Graph
             </h2>
+            <p className="mt-2 text-xs tracking-[0.16em] text-white/55 uppercase">
+              {timeline[activeIndex]
+                ? `${timeline[activeIndex].startLabel} → due ${timeline[activeIndex].dueLabel}`
+                : null}
+            </p>
           </div>
           {rerouteMode ? (
             <span className="rounded-full border border-orange-300/45 bg-orange-400/10 px-3 py-1 text-xs tracking-[0.16em] text-orange-200 uppercase">
@@ -153,14 +196,15 @@ export default function WavyRoadmapGraph({
           ) : null}
         </div>
 
-        <div className="overflow-x-auto rounded-3xl border border-white/10 bg-black/50 p-4">
+        <div className="rounded-3xl border border-white/10 bg-black/50 p-4">
           <svg
-            width={width}
-            height={height}
-            viewBox={`0 0 ${width} ${height}`}
-            className="mx-auto h-auto w-full min-w-[900px]"
+            width="100%"
+            height={520}
+            viewBox={viewBox}
+            className="block h-[520px] w-full"
             role="img"
             aria-label="Wavy roadmap timeline"
+            preserveAspectRatio="xMidYMid meet"
           >
             <defs>
               <linearGradient id="pathGradient" x1="0" y1="0" x2="1" y2="0">
@@ -199,6 +243,7 @@ export default function WavyRoadmapGraph({
 
             {points.map((point) => {
               const isActive = point.unitId === activeUnitId;
+              const isNear = Math.abs(points.findIndex((p) => p.unitId === point.unitId) - activeIndex) <= 2;
 
               return (
                 <g
@@ -209,39 +254,134 @@ export default function WavyRoadmapGraph({
                   <circle
                     cx={point.x}
                     cy={point.y}
-                    r={isActive ? 18 : 13}
+                    r={isActive ? 22 : 16}
                     className={`${nodeTone[point.status]} stroke-[2] transition-all`}
                   />
-                  <text
-                    x={point.x}
-                    y={point.y - 22}
-                    textAnchor="middle"
-                    fill="rgba(255,255,255,0.78)"
-                    fontSize="11"
-                    style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}
-                  >
-                    {point.dateLabel}
-                  </text>
-                  <text
-                    x={point.x}
-                    y={point.y + 30}
-                    textAnchor="middle"
-                    fill="rgba(255,255,255,0.86)"
-                    fontSize="12"
-                  >
-                    {point.title}
-                  </text>
+                  {isNear || isActive ? (
+                    <>
+                      <text
+                        x={point.x}
+                        y={point.y - 24}
+                        textAnchor="middle"
+                        fill="rgba(255,255,255,0.82)"
+                        fontSize="12"
+                        style={{ letterSpacing: "0.1em", textTransform: "uppercase" }}
+                      >
+                        {point.startLabel}
+                      </text>
+                      <text
+                        x={point.x}
+                        y={point.y + 34}
+                        textAnchor="middle"
+                        fill="rgba(255,255,255,0.88)"
+                        fontSize="13"
+                      >
+                        {point.title}
+                      </text>
+                    </>
+                  ) : null}
                 </g>
               );
             })}
           </svg>
         </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex gap-2 rounded-full border border-white/12 bg-black/45 p-1.5">
+            <button
+              type="button"
+              onClick={() => onActiveChange(timeline[Math.max(0, activeIndex - 1)]?.unitId ?? timeline[0]?.unitId)}
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.14em] text-white/80 uppercase transition hover:bg-white/10 hover:text-white"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onActiveChange(
+                  timeline[Math.min(timeline.length - 1, activeIndex + 1)]?.unitId ??
+                    timeline[timeline.length - 1]?.unitId
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.14em] text-white/80 uppercase transition hover:bg-white/10 hover:text-white"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs tracking-[0.16em] text-white/55 uppercase">
+            <span>
+              Segment {activeIndex + 1} / {timeline.length}
+            </span>
+            {timeline[activeIndex] ? (
+              <span
+                className={`rounded-full border px-3 py-1 ${
+                  timeline[activeIndex].status !== "completed" &&
+                  dayjs().isAfter(dayjs(timeline[activeIndex].dueISO))
+                    ? "border-orange-300/35 bg-orange-500/[0.08] text-orange-100"
+                    : "border-white/15 bg-white/[0.03] text-white/65"
+                }`}
+              >
+                Deadline {timeline[activeIndex].dueLabel}
+              </span>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <aside className="space-y-3">
-        {timeline.map((milestone, index) => {
+        <div className="rounded-2xl border border-white/12 bg-black/40 p-4 backdrop-blur-xl">
+          <p className="text-xs tracking-[0.16em] text-white/55 uppercase">Notes</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setNoteMode((m) => (m === "near" ? "all" : "near"))}
+              className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/75 transition hover:border-white/30"
+            >
+              {noteMode === "near" ? "Show All" : "Show Less"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setNoteFilter("all")}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                noteFilter === "all"
+                  ? "border-white/30 bg-white text-black"
+                  : "border-white/15 text-white/75 hover:border-white/30"
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setNoteFilter("done")}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                noteFilter === "done"
+                  ? "border-white/30 bg-white text-black"
+                  : "border-white/15 text-white/75 hover:border-white/30"
+              }`}
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              onClick={() => setNoteFilter("upcoming")}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                noteFilter === "upcoming"
+                  ? "border-white/30 bg-white text-black"
+                  : "border-white/15 text-white/75 hover:border-white/30"
+              }`}
+            >
+              Upcoming
+            </button>
+          </div>
+        </div>
+
+        {visibleNotes.map((milestone, index) => {
           const isActive = milestone.unitId === activeUnitId;
           const isLocked = milestone.status === "locked";
+          const overdue = milestone.status !== "completed" && dayjs().isAfter(dayjs(milestone.dueISO));
 
           return (
             <motion.article
@@ -256,7 +396,9 @@ export default function WavyRoadmapGraph({
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs tracking-[0.16em] text-white/55 uppercase">{milestone.dateLabel}</p>
+                  <p className="text-xs tracking-[0.16em] text-white/55 uppercase">
+                    {milestone.startLabel} → due {milestone.dueLabel}
+                  </p>
                   <h3 className="mt-1 text-sm font-medium text-white">{milestone.title}</h3>
                 </div>
                 {milestone.status === "completed" ? (
@@ -269,6 +411,11 @@ export default function WavyRoadmapGraph({
               </div>
 
               <p className="mt-2 text-xs leading-6 text-white/65">{milestone.note}</p>
+              {overdue ? (
+                <p className="mt-2 inline-flex rounded-full border border-orange-300/35 bg-orange-500/[0.08] px-3 py-1 text-[11px] tracking-[0.14em] text-orange-100 uppercase">
+                  Overdue
+                </p>
+              ) : null}
 
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
                 <div

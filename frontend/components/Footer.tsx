@@ -8,6 +8,7 @@ const footerLinks = [
   { href: "/auth", label: "Auth", match: "/auth" },
   { href: "/onboarding", label: "Onboarding", match: "/onboarding" },
   { href: "/roadmap/overview", label: "Roadmap", match: "/roadmap" },
+  { href: "/ai", label: "AI", match: "/ai" },
   { href: "/leaderboard", label: "Leaderboard", match: "/leaderboard" },
   { href: "/dashboard", label: "Dashboard", match: "/dashboard" },
   { href: "/test", label: "Test", match: "/test" },
@@ -63,4 +64,3 @@ export default function Footer() {
     </footer>
   );
 }
-

@@ -16,7 +16,10 @@ import type { GraphNodeStatus, RoadmapData, Unit } from "@/types/roadmap";
 type TimelineMilestone = {
   unitId: string;
   title: string;
-  dateLabel: string;
+  startISO: string;
+  dueISO: string;
+  startLabel: string;
+  dueLabel: string;
   completion: number;
   status: GraphNodeStatus;
   note: string;
@@ -124,10 +127,15 @@ export function RoadmapRuntimeProvider({ children }: { children: ReactNode }) {
 
     return roadmap.units.map((unit, index) => {
       const completion = getUnitCompletion(unit);
+      const start = dayjs().add(index * 7, "day");
+      const due = start.add(6, "day");
       return {
         unitId: unit.id,
         title: unit.title,
-        dateLabel: dayjs().add(index * 7, "day").format("DD MMM"),
+        startISO: start.toISOString(),
+        dueISO: due.toISOString(),
+        startLabel: start.format("DD MMM"),
+        dueLabel: due.format("DD MMM"),
         completion,
         status: getStatus(unit),
         note:

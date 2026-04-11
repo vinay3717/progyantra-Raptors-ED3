@@ -129,7 +129,9 @@ export default function RoadmapGraphPage() {
               transition={{ delay: index * 0.05 }}
               className="rounded-3xl border border-white/12 bg-black/45 p-5 backdrop-blur-xl"
             >
-              <p className="text-xs tracking-[0.16em] text-white/55 uppercase">{item.dateLabel}</p>
+              <p className="text-xs tracking-[0.16em] text-white/55 uppercase">
+                {item.startLabel} → due {item.dueLabel}
+              </p>
               <h3 className="mt-2 font-display text-2xl tracking-tight text-white">{item.title}</h3>
               <p className="mt-2 text-sm leading-7 text-white/70">{item.note}</p>
               <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
