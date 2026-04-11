@@ -1,41 +1,50 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { useTimer } from "react-timer-hook";
 import Navbar from "@/components/Navbar";
-import type { DifficultyBand } from "@/types/roadmap";
+import api from "@/lib/api";
 
-type QuizQuestion = {
-  id: string;
-  text: string;
+type PersonalityQuestion = {
+  question_id: number;
+  dimension: string;
+  question_text: string;
+  type: string;
   options: string[];
-  correct: number;
+  explanation_for_adaptation?: string;
 };
 
-const jobMarket = [
-  {
-    role: "Frontend Developer",
-    salary: "INR 6L - 16L",
-    demand: "High",
-    skills: ["HTML", "CSS", "React"],
-  },
-  {
-    role: "Data Analyst",
-    salary: "INR 5L - 14L",
-    demand: "High",
-    skills: ["SQL", "Python", "BI"],
-  },
-  {
-    role: "ML Engineer",
-    salary: "INR 10L - 28L",
-    demand: "High",
-    skills: ["Python", "MLOps", "Deep Learning"],
-  },
+type PersonalityAnswer = {
+  question_id: number;
+  dimension: string;
+  answer: string;
+};
+
+type PersonalityApiResponse = {
+  assistant_message: string;
+  parsed_question?: unknown;
+};
+
+const LIKERT_OPTIONS = [
+  "Strongly Disagree",
+  "Disagree",
+  "Neutral",
+  "Agree",
+  "Strongly Agree",
 ];
 
-const skills = [
+const PERSONALITY_TARGET_QUESTIONS = 8;
+
+const LIKERT_TO_SCORE: Record<string, number> = {
+  "strongly disagree": 1,
+  disagree: 2,
+  neutral: 3,
+  agree: 4,
+  "strongly agree": 5,
+};
+
+const SKILLS = [
   "Web Development",
   "Mobile Development",
   "Data Science",
@@ -46,337 +55,394 @@ const skills = [
   "UI/UX Design",
 ];
 
-const questions: QuizQuestion[] = [
-  {
-    id: "q1",
-    text: "Which HTML tag is used for the largest heading?",
-    options: ["<h1>", "<header>", "<head>", "<h6>"],
-    correct: 0,
-  },
-  {
-    id: "q2",
-    text: "Which CSS property controls spacing inside an element?",
-    options: ["margin", "padding", "gap", "border-spacing"],
-    correct: 1,
-  },
-  {
-    id: "q3",
-    text: "Which statement defines a variable in modern JavaScript?",
-    options: ["var", "let", "const", "Both let and const"],
-    correct: 3,
-  },
-  {
-    id: "q4",
-    text: "What does React primarily use to render lists efficiently?",
-    options: ["IDs in CSS", "Keys", "Refs", "Memo"],
-    correct: 1,
-  },
-  {
-    id: "q5",
-    text: "HTTP status 200 indicates:",
-    options: ["Redirect", "Unauthorized", "Success", "Server Error"],
-    correct: 2,
-  },
-];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
-function levelFromScore(score: number): DifficultyBand {
-  if (score <= 40) return "beginner";
-  if (score <= 75) return "intermediate";
-  return "advanced";
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item).trim())
+    .filter((item) => item.length > 0);
+}
+
+function toPersonalityQuestion(value: unknown): PersonalityQuestion | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.question_text !== "string" || typeof value.dimension !== "string") {
+    return null;
+  }
+
+  const type = typeof value.type === "string" ? value.type : "likert";
+  const options = asStringArray(value.options);
+
+  return {
+    question_id:
+      typeof value.question_id === "number" && Number.isFinite(value.question_id)
+        ? Math.max(1, Math.floor(value.question_id))
+        : 1,
+    dimension: value.dimension.trim(),
+    question_text: value.question_text.trim(),
+    type,
+    options: options.length > 0 ? options : type.toLowerCase() === "likert" ? LIKERT_OPTIONS : [],
+    explanation_for_adaptation:
+      typeof value.explanation_for_adaptation === "string"
+        ? value.explanation_for_adaptation
+        : undefined,
+  };
+}
+
+function apiErrorDetail(error: unknown): string | null {
+  if (!isRecord(error)) return null;
+  const response = error.response;
+  if (!isRecord(response)) return null;
+  const data = response.data;
+  if (isRecord(data) && typeof data.detail === "string") return data.detail;
+  if (typeof data === "string" && data.trim().length > 0) return data.trim();
+  return null;
+}
+
+function extractQuestion(response: PersonalityApiResponse): PersonalityQuestion | null {
+  const parsedFirst = toPersonalityQuestion(response.parsed_question);
+  if (parsedFirst) return parsedFirst;
+
+  if (!response.assistant_message) return null;
+  try {
+    const parsed = JSON.parse(response.assistant_message);
+    return toPersonalityQuestion(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function buildPersonalityScores(answers: PersonalityAnswer[]): Record<string, number> {
+  const buckets = new Map<string, { sum: number; count: number }>();
+  for (const answer of answers) {
+    const dimension = answer.dimension.trim();
+    if (!dimension) continue;
+    const normalized = answer.answer.trim().toLowerCase();
+    const score = LIKERT_TO_SCORE[normalized] ?? 3;
+    const current = buckets.get(dimension) ?? { sum: 0, count: 0 };
+    current.sum += score;
+    current.count += 1;
+    buckets.set(dimension, current);
+  }
+
+  const result: Record<string, number> = {};
+  for (const [key, value] of buckets.entries()) {
+    result[key] = Number((value.sum / value.count).toFixed(2));
+  }
+  return result;
+}
+
+function recommendedSkillsFromScores(scores: Record<string, number>): string[] {
+  const adaptability = scores["Adaptability & Cognitive Flexibility"] ?? 3;
+  const focus = scores["Attention Span & Focus Duration"] ?? 3;
+  const pace = scores["Learning Pace & Speed"] ?? 3;
+  const discipline = scores["Self-Discipline & Consistency"] ?? 3;
+
+  if (adaptability >= 4 && focus >= 4) return ["AI/ML", "Data Science", "Cloud & DevOps"];
+  if (discipline >= 4 && pace >= 3.5) return ["Web Development", "Cybersecurity", "Cloud & DevOps"];
+  if (focus <= 2.5) return ["UI/UX Design", "Mobile Development", "Web Development"];
+  return ["Web Development", "Data Science", "AI/ML"];
 }
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [selectedSkill, setSelectedSkill] = useState<string>("");
-  const [answers, setAnswers] = useState<Record<string, number>>({});
-  const [score, setScore] = useState<number | null>(null);
-  const [assignedLevel, setAssignedLevel] = useState<DifficultyBand | null>(null);
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [selectedSkill, setSelectedSkill] = useState("");
 
-  const expiryTimestamp = useMemo(() => {
-    const expiry = new Date();
-    expiry.setMinutes(expiry.getMinutes() + 20);
-    return expiry;
-  }, []);
+  const [personalityStarted, setPersonalityStarted] = useState(false);
+  const [personalityCompleted, setPersonalityCompleted] = useState(false);
+  const [personalityLoading, setPersonalityLoading] = useState(false);
+  const [personalityError, setPersonalityError] = useState<string | null>(null);
+  const [personalityQuestion, setPersonalityQuestion] = useState<PersonalityQuestion | null>(null);
+  const [personalityAnswers, setPersonalityAnswers] = useState<PersonalityAnswer[]>([]);
 
-  const { minutes, seconds, restart } = useTimer({
-    expiryTimestamp,
-    autoStart: step === 3,
-    onExpire: () => submitAssessment(),
-  });
+  const personalityScores = useMemo(
+    () => buildPersonalityScores(personalityAnswers),
+    [personalityAnswers]
+  );
+  const recommendedSkills = useMemo(
+    () => recommendedSkillsFromScores(personalityScores),
+    [personalityScores]
+  );
 
-  const submitAssessment = () => {
-    const correctAnswers = questions.reduce((acc, question) => {
-      return answers[question.id] === question.correct ? acc + 1 : acc;
-    }, 0);
-    const computedScore = Math.round((correctAnswers / questions.length) * 100);
-    const level = levelFromScore(computedScore);
+  const requestNextPersonalityQuestion = async (
+    previousAnswers: PersonalityAnswer[]
+  ): Promise<void> => {
+    setPersonalityLoading(true);
+    setPersonalityError(null);
+    try {
+      const { data } = await api.post<PersonalityApiResponse>(
+        "/api/personality-test/next-question",
+        {
+          target_skill: selectedSkill || null,
+          previous_answers: previousAnswers,
+        }
+      );
 
-    setScore(computedScore);
-    setAssignedLevel(level);
-    setStep(4);
+      const nextQuestion = extractQuestion(data);
+      if (!nextQuestion) {
+        throw new Error("Backend returned invalid question JSON.");
+      }
+      setPersonalityQuestion(nextQuestion);
+    } catch (error) {
+      setPersonalityQuestion(null);
+      setPersonalityError(
+        apiErrorDetail(error) ??
+          "Could not generate personality question. Please check backend and Gemini setup."
+      );
+    } finally {
+      setPersonalityLoading(false);
+    }
   };
 
-  useEffect(() => {
-    if (step !== 4 || !assignedLevel) return;
+  const startPersonalityTest = async (): Promise<void> => {
+    setPersonalityStarted(true);
+    setPersonalityCompleted(false);
+    setPersonalityAnswers([]);
+    await requestNextPersonalityQuestion([]);
+  };
 
-    const interval = setInterval(() => {
-      setLoadingProgress((prev) => {
-        if (prev >= 100) return 100;
-        return prev + 12;
-      });
-    }, 250);
+  const submitPersonalityAnswer = async (answer: string): Promise<void> => {
+    if (!personalityQuestion || personalityLoading) return;
 
-    return () => clearInterval(interval);
-  }, [step, assignedLevel]);
+    const updated: PersonalityAnswer[] = [
+      ...personalityAnswers,
+      {
+        question_id: personalityQuestion.question_id,
+        dimension: personalityQuestion.dimension,
+        answer,
+      },
+    ];
+    setPersonalityAnswers(updated);
 
-  useEffect(() => {
-    if (step !== 4 || loadingProgress < 100 || !assignedLevel) return;
+    if (updated.length >= PERSONALITY_TARGET_QUESTIONS) {
+      setPersonalityCompleted(true);
+      setPersonalityQuestion(null);
+      setStep(2);
+      return;
+    }
+
+    await requestNextPersonalityQuestion(updated);
+  };
+
+  const proceedToSkillSelection = () => {
+    if (personalityAnswers.length > 0) {
+      setPersonalityCompleted(true);
+    }
+    setStep(2);
+  };
+
+  const continueToBeginnerTest = () => {
+    if (!selectedSkill) return;
+    const skillSlug = selectedSkill.toLowerCase().replace(/\s+/g, "-");
 
     const rawUser = localStorage.getItem("auth_user");
+    let parsed: Record<string, unknown> = {};
     if (rawUser) {
       try {
-        const parsed = JSON.parse(rawUser) as {
-          selected_skill?: string;
-          test_score?: number;
-          level?: DifficultyBand;
-          onboarding_complete?: boolean;
-        };
-        parsed.selected_skill = selectedSkill.toLowerCase().replace(/\s+/g, "-");
-        parsed.test_score = score ?? 0;
-        parsed.level = assignedLevel;
-        parsed.onboarding_complete = true;
-        localStorage.setItem("auth_user", JSON.stringify(parsed));
+        const userObj = JSON.parse(rawUser);
+        if (isRecord(userObj)) {
+          parsed = { ...userObj };
+        }
       } catch {
-        // Ignore malformed local state.
+        parsed = {};
       }
     }
 
-    const timeout = setTimeout(() => {
-      const skillSlug = selectedSkill.toLowerCase().replace(/\s+/g, "-");
-      router.push(`/roadmap/overview?skill=${skillSlug}`);
-    }, 600);
-
-    return () => clearTimeout(timeout);
-  }, [assignedLevel, loadingProgress, router, score, selectedSkill, step]);
-
-  const stepLabel =
-    step === 1
-      ? "Career Discovery"
-      : step === 2
-      ? "Skill Selection"
-      : step === 3
-      ? "Beginner Assessment"
-      : "Roadmap Generation";
+    parsed.selected_skill = skillSlug;
+    parsed.personality_scores = Object.keys(personalityScores).length > 0 ? personalityScores : null;
+    parsed.personality_answers = personalityAnswers;
+    localStorage.setItem("auth_user", JSON.stringify(parsed));
+    router.push(`/onboarding/beginner-test?skill=${encodeURIComponent(skillSlug)}`);
+  };
 
   return (
-    <div className="min-h-screen bg-black px-5 pb-20 pt-6 sm:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#080611] via-[#130b24] to-[#07050d] px-5 pb-20 pt-6 sm:px-8">
       <Navbar />
       <main className="mx-auto w-full max-w-6xl pt-8">
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="card-surface rounded-3xl p-7 sm:p-9"
+          transition={{ duration: 0.35 }}
+          className="card-surface rounded-3xl border border-violet-300/20 bg-black/35 p-7 shadow-[0_0_80px_rgba(124,58,237,0.15)] backdrop-blur-xl sm:p-9"
         >
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs tracking-[0.2em] text-slate-400 uppercase">
-                Onboarding Wizard
-              </p>
+              <p className="text-xs uppercase tracking-[0.22em] text-violet-200/70">New Registration</p>
               <h1 className="mt-2 font-display text-3xl font-semibold text-white sm:text-4xl">
-                {stepLabel}
+                {step === 1 ? "Personality Test" : "Skill Recommendation & Selection"}
               </h1>
             </div>
-            <div className="rounded-full border border-white/20 px-4 py-2 text-xs text-slate-300">
-              Step {step} / 4
+            <div className="rounded-full border border-violet-300/25 bg-violet-500/10 px-4 py-2 text-xs text-violet-100">
+              Step {step} / 2
             </div>
           </div>
 
           {step === 1 ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <article className="rounded-2xl border border-white/10 bg-black/40 p-5">
-                <p className="text-xs tracking-[0.2em] text-slate-400 uppercase">
-                  Path A
-                </p>
-                <h2 className="mt-2 text-lg font-semibold text-white">
-                  Personality Diagnostic
-                </h2>
-                <p className="mt-2 text-sm leading-7 text-slate-300">
-                  10-15 interest and work-style questions to recommend top career
-                  domains.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-sm text-white transition hover:border-white/40"
-                >
-                  Continue
-                </button>
-              </article>
+            <div className="space-y-4">
+              <p className="text-sm text-slate-300">
+                Adaptive questions are generated from your custom backend prompt. Answer one-by-one
+                so we can personalize your Beginner Test and roadmap.
+              </p>
 
-              <article className="rounded-2xl border border-white/10 bg-black/40 p-5">
-                <p className="text-xs tracking-[0.2em] text-slate-400 uppercase">
-                  Path B
-                </p>
-                <h2 className="mt-2 text-lg font-semibold text-white">Job Market</h2>
-                <div className="mt-3 space-y-2">
-                  {jobMarket.map((role) => (
-                    <div
-                      key={role.role}
-                      className="rounded-lg border border-white/10 bg-black/30 p-3"
-                    >
-                      <p className="text-sm font-medium text-white">{role.role}</p>
-                      <p className="text-xs text-slate-400">
-                        {role.salary} • Demand {role.demand}
-                      </p>
-                    </div>
-                  ))}
+              {!personalityStarted ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void startPersonalityTest()}
+                    className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110"
+                  >
+                    Start Personality Test
+                  </button>
+                  <button
+                    type="button"
+                    onClick={proceedToSkillSelection}
+                    className="rounded-xl border border-violet-300/30 px-5 py-2.5 text-sm text-violet-100 transition hover:border-violet-200/60"
+                  >
+                    Skip for now
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-sm text-white transition hover:border-white/40"
-                >
-                  Continue
-                </button>
-              </article>
+              ) : null}
 
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="rounded-xl border border-white/20 px-4 py-3 text-sm text-slate-300 transition hover:text-white lg:col-span-2"
-              >
-                Skip, I know what I want
-              </button>
+              {personalityStarted ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-violet-200/80">
+                    Progress {personalityAnswers.length}/{PERSONALITY_TARGET_QUESTIONS}
+                  </p>
+
+                  <div className="h-2 overflow-hidden rounded-full bg-violet-950/70">
+                    <div
+                      className="h-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-indigo-400 transition-all duration-300"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (personalityAnswers.length / PERSONALITY_TARGET_QUESTIONS) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+
+                  {personalityLoading ? (
+                    <div className="rounded-2xl border border-violet-300/20 bg-black/35 p-4 text-sm text-violet-100">
+                      Generating your next adaptive question...
+                    </div>
+                  ) : null}
+
+                  {personalityError ? (
+                    <div className="rounded-2xl border border-rose-300/30 bg-rose-950/20 p-4 text-sm text-rose-200">
+                      {personalityError}
+                    </div>
+                  ) : null}
+
+                  {personalityQuestion ? (
+                    <div className="rounded-2xl border border-violet-300/20 bg-black/40 p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-violet-200/70">
+                        {personalityQuestion.dimension}
+                      </p>
+                      <p className="mt-2 text-sm font-medium leading-7 text-white">
+                        {personalityQuestion.question_text}
+                      </p>
+                      <div className="mt-4 grid gap-2">
+                        {(personalityQuestion.options.length > 0
+                          ? personalityQuestion.options
+                          : LIKERT_OPTIONS
+                        ).map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            disabled={personalityLoading}
+                            onClick={() => void submitPersonalityAnswer(option)}
+                            className="rounded-lg border border-violet-300/25 bg-violet-900/10 px-3 py-2 text-left text-xs text-violet-100 transition hover:border-violet-200/70 hover:bg-violet-700/20 disabled:opacity-60"
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={proceedToSkillSelection}
+                      className="rounded-xl border border-violet-300/30 px-4 py-2 text-xs text-violet-100 transition hover:border-violet-200/70"
+                    >
+                      Continue to Skill Selection
+                    </button>
+                    {personalityError ? (
+                      <button
+                        type="button"
+                        onClick={() => void requestNextPersonalityQuestion(personalityAnswers)}
+                        className="rounded-xl bg-violet-600/85 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-500"
+                      >
+                        Retry Question
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           {step === 2 ? (
-            <div>
-              <p className="mb-4 text-sm text-slate-300">
-                Select one skill domain to continue.
+            <div className="space-y-5">
+              <p className="text-sm text-slate-300">
+                Choose your domain. Next we will run the adaptive Beginner Test (12-20 questions)
+                before roadmap generation.
               </p>
+
+              {personalityCompleted ? (
+                <div className="rounded-2xl border border-violet-300/25 bg-violet-900/15 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-violet-200/70">Recommended For You</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {recommendedSkills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full border border-violet-200/40 bg-violet-600/20 px-3 py-1 text-xs text-violet-100"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {skills.map((skill) => (
+                {SKILLS.map((skill) => (
                   <button
                     key={skill}
                     type="button"
                     onClick={() => setSelectedSkill(skill)}
                     className={`rounded-xl border px-4 py-4 text-left text-sm transition ${
                       selectedSkill === skill
-                        ? "border-white bg-white text-black"
-                        : "border-white/15 bg-black/40 text-slate-200 hover:border-white/30"
+                        ? "border-violet-200 bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-900/45"
+                        : "border-violet-300/20 bg-black/35 text-violet-100 hover:border-violet-200/60"
                     }`}
                   >
                     {skill}
                   </button>
                 ))}
               </div>
-              <div className="mt-6 flex gap-2">
+
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="rounded-lg border border-white/20 px-4 py-2 text-sm text-slate-200"
+                  className="rounded-xl border border-violet-300/30 px-4 py-2 text-sm text-violet-100 transition hover:border-violet-200/70"
                 >
                   Back
                 </button>
                 <button
                   type="button"
                   disabled={!selectedSkill}
-                  onClick={() => {
-                    setStep(3);
-                    const next = new Date();
-                    next.setMinutes(next.getMinutes() + 20);
-                    restart(next);
-                  }}
-                  className="button-shimmer rounded-lg px-4 py-2 text-sm font-semibold text-black disabled:opacity-40"
+                  onClick={continueToBeginnerTest}
+                  className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Confirm Skill
+                  Continue to Beginner Test
                 </button>
               </div>
-            </div>
-          ) : null}
-
-          {step === 3 ? (
-            <div>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-300">
-                  Skill:{" "}
-                  <span className="font-semibold text-white">{selectedSkill}</span>
-                </p>
-                <span className="rounded-full border border-white/20 px-3 py-1 text-xs text-slate-300">
-                  Timer {minutes}:{seconds.toString().padStart(2, "0")}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {questions.map((question, idx) => (
-                  <article
-                    key={question.id}
-                    className="rounded-xl border border-white/10 bg-black/35 p-4"
-                  >
-                    <p className="text-sm font-medium text-white">
-                      {idx + 1}. {question.text}
-                    </p>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {question.options.map((option, optionIndex) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() =>
-                            setAnswers((prev) => ({ ...prev, [question.id]: optionIndex }))
-                          }
-                          className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
-                            answers[question.id] === optionIndex
-                              ? "border-white bg-white text-black"
-                              : "border-white/15 bg-black/40 text-slate-300 hover:border-white/30"
-                          }`}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <div className="mt-6 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="rounded-lg border border-white/20 px-4 py-2 text-sm text-slate-200"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={submitAssessment}
-                  className="button-shimmer rounded-lg px-4 py-2 text-sm font-semibold text-black"
-                >
-                  Submit Test
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {step === 4 ? (
-            <div className="space-y-5">
-              <p className="text-sm text-slate-300">
-                Building your personalised roadmap...
-              </p>
-              <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-white via-slate-200 to-sky-200"
-                  animate={{ width: `${loadingProgress}%` }}
-                  transition={{ duration: 0.2, ease: "linear" }}
-                />
-              </div>
-              <p className="text-sm text-slate-400">
-                Assessment Score:{" "}
-                <span className="font-semibold text-white">{score ?? 0}%</span> •
-                Assigned Level:{" "}
-                <span className="font-semibold text-white">{assignedLevel}</span>
-              </p>
             </div>
           ) : null}
         </motion.section>

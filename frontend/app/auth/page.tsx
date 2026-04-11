@@ -30,7 +30,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "signup">("signup");
-  const { signup, login, loading } = useAuth();
+  const { signup, login, loading, error } = useAuth();
 
   const signupForm = useForm<SignupForm>({
     resolver: zodResolver(signupSchema),
@@ -108,6 +108,11 @@ export default function AuthPage() {
           transition={{ type: "spring", stiffness: 100, damping: 18 }}
           className="card-surface rounded-3xl p-7 sm:p-9"
         >
+          {error ? (
+            <div className="mb-4 rounded-xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              {error}
+            </div>
+          ) : null}
           {mode === "signup" ? (
             <form onSubmit={handleSignup} className="space-y-4">
               <Field

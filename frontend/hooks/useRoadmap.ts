@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import type { AxiosError } from "axios";
 import type {
   DifficultyBand,
   GraphNodeStatus,
@@ -231,6 +232,11 @@ function getNodeStatus(unit: Unit): GraphNodeStatus {
   return "locked";
 }
 
+function getHttpStatus(error: unknown): number | null {
+  const axiosError = error as AxiosError;
+  return axiosError?.response?.status ?? null;
+}
+
 export function useRoadmap(skill: string) {
   const [roadmap, setRoadmap] = useState<RoadmapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -241,6 +247,14 @@ export function useRoadmap(skill: string) {
     setError(null);
 
     if (typeof window !== "undefined") {
+      const authToken = window.localStorage.getItem("token");
+      if (!authToken) {
+        setRoadmap(null);
+        setError("Please login to view your roadmap.");
+        setLoading(false);
+        return;
+      }
+
       const overrideRaw = window.localStorage.getItem(`ai_roadmap:${skill}`);
       if (overrideRaw) {
         try {
@@ -273,7 +287,13 @@ export function useRoadmap(skill: string) {
     try {
       const { data } = await api.get<RoadmapData>(`/api/roadmap/${skill}`);
       setRoadmap(data);
-    } catch {
+    } catch (error) {
+      if (getHttpStatus(error) === 401) {
+        setRoadmap(null);
+        setError("Your session expired. Please login again.");
+        return;
+      }
+
       setRoadmap({ ...mockRoadmap, skill });
       setError("Using local roadmap preview. Backend route is not connected yet.");
     } finally {
@@ -335,8 +355,10 @@ export function useRoadmap(skill: string) {
         subpoint_id: subpointId,
         score_earned: scoreEarned,
       });
-    } catch {
-      // Frontend-first mode: optimistic state already updated.
+    } catch (error) {
+      if (getHttpStatus(error) === 401) {
+        setError("Session expired. Progress will sync after you login again.");
+      }
     }
   };
 

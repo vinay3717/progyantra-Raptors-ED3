@@ -9,6 +9,12 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy import DateTime, Integer, String, create_engine, or_, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from login_signup.personality_test.router import router as personality_test_router
+from login_signup.skill_recommendation.router import (
+    router as skill_recommendation_router,
+)
+from login_signup.skill_test.router import router as skill_test_router
+
 # Simple config with safe defaults. Use env vars in production.
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./login_signup.db")
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
@@ -80,6 +86,9 @@ class TokenResponse(BaseModel):
 
 
 app = FastAPI(title="Login/Signup API")
+app.include_router(personality_test_router)
+app.include_router(skill_recommendation_router)
+app.include_router(skill_test_router)
 
 
 def get_db() -> Generator[Session, None, None]:

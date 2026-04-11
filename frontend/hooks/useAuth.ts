@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import type { AxiosError } from "axios";
 import type { AuthPayload, AuthResponse, AuthUser } from "@/types/user";
 
 type Credentials = {
@@ -21,7 +22,9 @@ function decodeJwtPayload(token: string): AuthPayload | null {
   try {
     const [, payload] = token.split(".");
     if (!payload) return null;
-    const decoded = JSON.parse(atob(payload));
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
+    const decoded = JSON.parse(atob(padded));
     return decoded as AuthPayload;
   } catch {
     return null;
@@ -40,6 +43,15 @@ function getUserFromStorage(): AuthUser | null {
   }
 }
 
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const axiosError = error as AxiosError<{ detail?: string; message?: string }>;
+  const detail = axiosError?.response?.data?.detail ?? axiosError?.response?.data?.message;
+  if (typeof detail === "string" && detail.trim().length > 0) {
+    return detail;
+  }
+  return fallback;
+}
+
 export function useAuth() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(() => getUserFromStorage());
@@ -55,6 +67,12 @@ export function useAuth() {
     localStorage.setItem(AUTH_TOKEN_KEY, token);
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(fallbackUser));
     setUser(fallbackUser);
+  };
+
+  const clearAuthState = () => {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+    setUser(null);
   };
 
   const login = async (payload: Credentials) => {
@@ -88,22 +106,9 @@ export function useAuth() {
       } else {
         router.push("/onboarding");
       }
-    } catch {
-      const fallbackToken = "mock.jwt.token";
-      const nextUser: AuthUser = {
-        id: crypto.randomUUID(),
-        name: payload.email.split("@")[0] ?? "Learner",
-        email: payload.email,
-        selected_skill: null,
-        test_score: null,
-        level: null,
-        onboarding_complete: false,
-        total_points: 0,
-        streak_days: 0,
-      };
-
-      persistAuth(fallbackToken, nextUser);
-      router.push("/onboarding");
+    } catch (error) {
+      clearAuthState();
+      setError(getApiErrorMessage(error, "Unable to login. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -130,30 +135,16 @@ export function useAuth() {
 
       persistAuth(data.token, nextUser);
       router.push("/onboarding");
-    } catch {
-      const fallbackToken = "mock.jwt.token";
-      const nextUser: AuthUser = {
-        id: crypto.randomUUID(),
-        name: payload.name,
-        email: payload.email,
-        selected_skill: null,
-        test_score: null,
-        level: null,
-        onboarding_complete: false,
-        total_points: 0,
-        streak_days: 0,
-      };
-      persistAuth(fallbackToken, nextUser);
-      router.push("/onboarding");
+    } catch (error) {
+      clearAuthState();
+      setError(getApiErrorMessage(error, "Unable to create account. Please try again."));
     } finally {
       setLoading(false);
     }
   };
 
   const logout = () => {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(AUTH_USER_KEY);
-    setUser(null);
+    clearAuthState();
     router.push("/auth");
   };
 
